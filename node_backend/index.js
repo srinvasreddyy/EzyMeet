@@ -20,7 +20,10 @@ const nodemailer = require('nodemailer');
 passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  callbackURL: "/api/oauth/google/callback",
+  callbackURL: process.env.SERVER_URL 
+                 ? `${process.env.SERVER_URL}/api/oauth/google/callback`
+                 : "http://localhost:3000/api/oauth/google/callback",
+  proxy: true,
   scope:["profile","email"],
   passReqToCallback:true
 },

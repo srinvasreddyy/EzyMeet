@@ -27,4 +27,4 @@ frames_extracted
 .zip
 .mp4
 
-public/frames
+public/frames/*.jpg

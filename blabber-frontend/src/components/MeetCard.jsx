@@ -49,14 +49,19 @@ const reportTypes = [
       bottom: 'auto',
       marginRight: '-50%',
       transform: 'translate(-50%, -50%)',
-      padding: '20px',
-      maxWidth: '400px',
-      width: '100%',
-      borderRadius: '10px',
+      padding: '2rem',
+      maxWidth: '500px',
+      width: '90%',
+      borderRadius: '20px',
+      background: 'var(--bg-primary)',
+      border: '1px solid var(--border-glass)',
+      color: 'var(--text-primary)',
+      boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
     },
     overlay: {
-      backgroundColor: 'rgba(0, 0, 0, 0.1)', // Light transparent background
-      zIndex: 1000, // Ensure it stays on top
+      backgroundColor: 'rgba(5, 5, 16, 0.8)',
+      backdropFilter: 'blur(8px)',
+      zIndex: 1000,
     },
   };
   const MeetCard = ({ meet }) => {
@@ -147,41 +152,41 @@ const reportTypes = [
     };
 
     return (
-        <div className="border border-purple-300 bg-white shadow-lg rounded-xl p-6 m-4 hover:shadow-2xl shadow-purple-300 hover:shadow-purple-300 transition-shadow duration-300">
-            <div className="flex flex-row w-full">
-                <div className="flex flex-col items-start w-full">
-                    <div className='flex flex-col md:flex-row justify-between'>
-                        <div >
-                            <h2 className="text-2xl font-bold text-blue-600 mb-2">{meet.meetingTitle}</h2>
-                            <p className="p-1 text-sm text-gray-500">Hosted by <span className="font-semibold">{meet.convenor}</span></p>
+        <div className="meet-card">
+            <div className="meet-card-content">
+                <div className="meet-card-main">
+                    <div className="meet-card-header">
+                        <div>
+                            <h2 className="meet-title">{meet.meetingTitle}</h2>
+                            <p className="meet-host">Hosted by <span>{meet.convenor}</span></p>
                         </div>
-                        <div className="mb-2 flex flex-wrap md:w-1/2 md:self-end">
-                            <p className="text-sm p-1"><strong className="mb-1 text-purple-900">From:</strong> {formatTime(meet.meetingStartTimeStamp)}  </p><p className="text-sm p-1"> <strong className="text-blue-700">To:</strong> {formatTime(meet.meetingEndTimeStamp)}</p>
+                        <div className="meet-time">
+                            <p><strong>From:</strong> {formatTime(meet.meetingStartTimeStamp)}</p>
+                            <p><strong>To:</strong> {formatTime(meet.meetingEndTimeStamp)}</p>
                         </div>
                     </div>
 
-                    <div className="w-full border-b border-gray-300 mb-2"></div>
+                    <div className="meet-divider"></div>
 
-                    <p className="w-full">
-                        <p className="flex flex-wrap justify-between w-full">
-                            <p className="text-sm p-1"><strong className="mb-1 text-purple-900">Email:</strong> {meet.blabberEmail} </p><p className="text-sm p-1"> <strong className="text-blue-700">Duration:</strong> {calculateDuration(meet.meetingStartTimeStamp, meet.meetingEndTimeStamp)}</p>
-                        </p>
-                    </p>
+                    <div className="meet-details">
+                        <p><strong>Email:</strong> {meet.blabberEmail}</p>
+                        <p><strong>Duration:</strong> {calculateDuration(meet.meetingStartTimeStamp, meet.meetingEndTimeStamp)}</p>
+                    </div>
 
-                    <div className="w-full border-b border-gray-300 mb-2"></div>
+                    <div className="meet-divider"></div>
 
-                    <p className="w-full">
-                        <p className="mb-2 flex flex-wrap justify-between w-full">
-                            <p className="text-sm p-1"><strong className="text-gray-600">Speakers:</strong> {meet.speakers.length > 0 ? meet.speakers.join(', ') : 'No speakers'} </p>
-                            <p className="text-sm p-1"><strong className="text-gray-600">Attendees:</strong> {meet.attendees.length > 0 ? meet.attendees.join(', ') : 'No attendees'}</p>
-                        </p>
-                    </p>
-                <button
-                    onClick={openModal}
-                    className="mt-1 bg-purple-700 text-white px-4 py-2 self-end rounded hover:bg-purple-900"
-                >
-                    Generate Report
-                </button>
+                    <div className="meet-participants">
+                        <p><strong>Speakers:</strong> {meet.speakers?.length > 0 ? meet.speakers.join(', ') : 'No speakers'}</p>
+                        <p><strong>Attendees:</strong> {meet.attendees?.length > 0 ? meet.attendees.join(', ') : 'No attendees'}</p>
+                    </div>
+
+                    <button
+                        onClick={openModal}
+                        className="btn-primary mt-4"
+                        style={{ alignSelf: 'flex-start' }}
+                    >
+                        Generate Report
+                    </button>
                 </div>
             </div>
             {/* Modal for Report Generation */}
@@ -191,33 +196,34 @@ const reportTypes = [
     style={customStyles}
     contentLabel="Generate Report Modal"
 >
-    <h2 className="text-xl font-bold mb-4">Generate Report for {meetingTitle}</h2>
+    <h2 className="text-2xl font-bold mb-6 text-white tracking-tight">Generate Report</h2>
 
-    <form onSubmit={handleGenerateReport}>
+    <form onSubmit={handleGenerateReport} className="flex flex-col gap-4">
         {/* Meeting Title */}
-        <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2">Meeting Title:</label>
+        <div>
+            <label className="block text-gray-400 text-sm font-semibold mb-1">Meeting Title:</label>
             <input
                 type="text"
                 value={meetingTitle}
                 onChange={(e) => setMeetingTitle(e.target.value)}
-                className="border rounded w-full py-2 px-3 text-gray-700"
+                className="w-full bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.1)] rounded-xl py-2.5 px-4 text-white focus:outline-none focus:border-purple-500 transition-colors"
+                autoFocus
             />
         </div>
 
         {/* Report Type Dropdown */}
-        <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2">Type of Report:</label>
+        <div>
+            <label className="block text-gray-400 text-sm font-semibold mb-1">Type of Report:</label>
             <select
                 value={reportType}
                 onChange={(e) => {
                     setReportType(e.target.value);
-                    setInterval(undefined); // Reset the interval when report type changes
+                    setInterval(undefined);
                 }}
-                className="border rounded w-full py-2 px-3 text-gray-700"
+                className="w-full bg-[#0a0a1a] border border-[rgba(255,255,255,0.1)] rounded-xl py-2.5 px-4 text-white focus:outline-none focus:border-purple-500 transition-colors appearance-none"
                 required
             >
-                <option value="">Select Report Type</option>
+                <option value="" disabled>Select Report Type</option>
                 {reportTypes.map((type) => (
                     <option key={type.value} value={type.value}>
                         {type.label}
@@ -232,22 +238,22 @@ const reportTypes = [
                     min="1"
                     value={interval}
                     onChange={(e) => setInterval(e.target.value)}
-                    className="border rounded w-full py-2 px-3 text-gray-700 mt-2"
-                    placeholder="Enter interval"
+                    className="w-full bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.1)] rounded-xl py-2.5 px-4 text-white mt-3 focus:outline-none focus:border-purple-500 transition-colors"
+                    placeholder="Enter interval (minutes)"
                 />
             )}
         </div>
 
         {/* Report Format Dropdown */}
-        <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2">Choose a Format:</label>
+        <div>
+            <label className="block text-gray-400 text-sm font-semibold mb-1">Choose a Format:</label>
             <select
                 value={reportFormat}
                 onChange={(e) => setReportFormat(e.target.value)}
-                className="border rounded w-full py-2 px-3 text-gray-700"
+                className="w-full bg-[#0a0a1a] border border-[rgba(255,255,255,0.1)] rounded-xl py-2.5 px-4 text-white focus:outline-none focus:border-purple-500 transition-colors appearance-none"
                 required
             >
-                <option value="">Select Report Format</option>
+                <option value="" disabled>Select Report Format</option>
                 {reportFormats.map((format) => (
                     <option key={format.value} value={format.value}>
                         {format.label}
@@ -257,32 +263,34 @@ const reportTypes = [
         </div>
 
         {/* Email Input Field */}
-        <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2">Send to these Email Addresses:</label>
-            <div className="flex flex-col">
+        <div>
+            <label className="block text-gray-400 text-sm font-semibold mb-1">Send to Email(s):</label>
+            <div className="flex flex-col gap-2">
                 {emails.map((email, index) => (
-                    <div key={index} className="flex items-center mb-2">
+                    <div key={index} className="flex items-center gap-2">
                         <input
                             type="email"
                             value={email}
                             onChange={(e) => handleEmailChange(e, index)}
-                            className="border rounded w-full py-2 px-3 text-gray-700 mr-2"
-                            placeholder="Enter email"
+                            className="flex-1 bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.1)] rounded-xl py-2.5 px-4 text-white focus:outline-none focus:border-purple-500 transition-colors"
+                            placeholder="colleague@example.com"
                             required
                         />
-                        <button
-                            type="button"
-                            onClick={() => removeEmail(index)}
-                            className="px-2 py-1 bg-red-700 text-white rounded hover:bg-red-900"
-                        >
-                            Remove
-                        </button>
+                        {emails.length > 1 && (
+                            <button
+                                type="button"
+                                onClick={() => removeEmail(index)}
+                                className="px-3 py-2.5 border border-red-500/30 text-red-400 rounded-xl hover:bg-red-500/10 transition-colors"
+                            >
+                                ✕
+                            </button>
+                        )}
                     </div>
                 ))}
                 <button
                     type="button"
                     onClick={addEmail}
-                    className="mt-2 px-4 py-2 bg-blue-700 text-white rounded hover:bg-blue-900"
+                    className="text-sm text-purple-400 hover:text-purple-300 font-medium self-start mt-1 flex items-center gap-1"
                 >
                     + Add Another Email
                 </button>
@@ -290,12 +298,12 @@ const reportTypes = [
         </div>
 
         {/* Submit Button */}
-        <div className="flex justify-end">
-            {error && <p className="text-red-500 mb-4">{error}</p>}
+        <div className="flex justify-end gap-3 mt-4">
+            {error && <p className="text-red-400 text-sm self-center mr-auto">{error}</p>}
 
             <button
                 type="button"
-                className="mr-2 px-4 py-2 bg-gray-300 rounded"
+                className="px-5 py-2.5 border border-[rgba(255,255,255,0.1)] text-gray-300 rounded-xl hover:bg-[rgba(255,255,255,0.05)] transition-colors font-medium"
                 onClick={closeModal}
                 disabled={loading}
             >
@@ -303,10 +311,10 @@ const reportTypes = [
             </button>
             <button
                 type="submit"
-                className={`px-4 py-2 bg-purple-700 text-white rounded ${loading ? 'opacity-50' : 'hover:bg-purple-900'}`}
+                className={`btn-primary px-6 py-2.5 rounded-xl font-medium ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                 disabled={loading}
             >
-                {loading ? 'Generating...' : 'Generate Report'}
+                {loading ? 'Generating...' : 'Generate '}
             </button>
         </div>
     </form>

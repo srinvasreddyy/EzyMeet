@@ -59,6 +59,29 @@ const Dashboard = () => {
     }
   };
 
+  const dummyMeets = [
+    {
+      _id: "preview-1",
+      meetingTitle: "Weekly Team Sync",
+      convenor: "Alex (You)",
+      blabberEmail: "alex@example.com",
+      meetingStartTimeStamp: new Date(Date.now() - 3600000).toISOString(),
+      meetingEndTimeStamp: new Date(Date.now() - 1800000).toISOString(),
+      speakers: ["Alex", "Jordan", "Taylor"],
+      attendees: ["Alex", "Jordan", "Taylor", "Sam"],
+    },
+    {
+      _id: "preview-2",
+      meetingTitle: "Client Discovery Call",
+      convenor: "Alex (You)",
+      blabberEmail: "alex@example.com",
+      meetingStartTimeStamp: new Date(Date.now() - 86400000).toISOString(),
+      meetingEndTimeStamp: new Date(Date.now() - 82800000).toISOString(),
+      speakers: ["Alex", "Morgan"],
+      attendees: ["Alex", "Morgan", "Casey"],
+    }
+  ];
+
   return (
     <div className="dashboard-page">
       <div className="dashboard-header">
@@ -89,23 +112,46 @@ const Dashboard = () => {
         </div>
       )}
 
-      {!loading && !error && meets.length === 0 && (
-        <div className="dashboard-empty">
-          <FaCalendarTimes className="icon" style={{ color: 'var(--text-muted)' }} />
-          <span>No meets available.</span>
+      {!loading && !error && meets.length === 0 ? (
+        <div className="empty-state-wrapper">
+          <div className="empty-state-pulse"></div>
+          
+          <div className="empty-state-bg">
+            <div className="dashboard-grid" style={{ opacity: 0.6, pointerEvents: 'none', filter: 'blur(3px) grayscale(0.2)', width: '100%' }}>
+              {dummyMeets.map(meet => (
+                <MeetCard
+                  key={meet._id}
+                  meet={meet}
+                  isModalOpen={false}
+                  setIsModalOpen={() => {}}
+                />
+              ))}
+            </div>
+          </div>
+          
+          <div className="empty-state-content">
+            <div className="empty-state-icon">✨</div>
+            <h2 className="empty-state-title">Your Dashboard is Empty</h2>
+            <p className="empty-state-desc">
+              Get ready to transform your meetings. Once you capture your first session, your transcripts, AI summaries, and actionable insights will appear right here.
+            </p>
+            <button className="btn-primary" onClick={() => window.open('https://meet.google.com/new', '_blank')}>
+              Start a Google Meet
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="dashboard-grid">
+          {!loading && !error && meets.map(meet => (
+            <MeetCard
+              key={meet._id}
+              meet={meet}
+              isModalOpen={isModalOpen}
+              setIsModalOpen={setIsModalOpen}
+            />
+          ))}
         </div>
       )}
-
-      <div className="dashboard-grid">
-        {meets.map(meet => (
-          <MeetCard
-            key={meet._id}
-            meet={meet}
-            isModalOpen={isModalOpen}
-            setIsModalOpen={setIsModalOpen}
-          />
-        ))}
-      </div>
 
       {isModalOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 40 }} />
