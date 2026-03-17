@@ -26,12 +26,24 @@ passport.use(new GoogleStrategy({
 },
 async function(request, accessToken, refreshToken, profile, done) { 
   try {
-    const email = profile?.emails[0]?.value;
+    const email = profile?.emails?.[0]?.value;
+    console.log("Profile received:", profile.id, email);
+    
+    if (!email) {
+       console.error("No email found in Google profile");
+       return done(null, false, { message: 'No email found' });
+    }
+
     let user = await User.findOne({ email });
     
-    if (!user) user = await User.create({ email, name: profile?.displayName });
+    if (!user) {
+        console.log("Creating new user for:", email);
+        user = await User.create({ email, name: profile?.displayName || 'Unknown' });
+    }
+    console.log("Authenticated user:", user.email);
     return done(null, user); 
   } catch (err) {
+    console.error("GoogleStrategy Error: ", err);
     return done(err, false);
   }
 } 
@@ -219,7 +231,7 @@ app.get("/api/oauth/login/failed", async (req, res) => {
     });
 });
 
-app.get("/api/oauth/google", passport.authenticate("google",  { scope: ["profile", "email"], prompt: 'select_account' }));
+app.get("/api/oauth/google", passport.authenticate("google",  { scope: ["profile", "email"], prompt: 'select_account', session: false }));
 
 
 // Google OAuth callback URL
