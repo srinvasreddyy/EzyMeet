@@ -31,19 +31,16 @@ export const AuthContextProvider= ({ children }) => {
     const fetchUser = async () => {
       dispatch({ type: 'SET_LOADING' });
       try {
-        console.log("HAHAHAHHAHAHAHAHHA")
         const response = await fetch('/api/users/check', {
           method: 'GET',
           credentials: 'include',
         });
 
-        console.log(response)
         if (!response.ok) {
           throw new Error('Failed to fetch user');
         }
 
         const data = await response.json();
-        console.log(data)
         if (data.user) {
           dispatch({ type: 'LOGIN', payload: data.user });
         } else {

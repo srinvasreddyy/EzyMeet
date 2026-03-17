@@ -5,28 +5,26 @@ import { FaExclamationCircle, FaSpinner, FaCalendarTimes } from 'react-icons/fa'
 const Dashboard = () => {
   const [meets, setMeets] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [loading, setLoading] = useState(true); // Loading state
-  const [error, setError] = useState(null); // Error state
-  const [autoEnabled, setAutoEnabled] = useState(false); // State for auto-enabled toggle
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [autoEnabled, setAutoEnabled] = useState(false);
 
   useEffect(() => {
     const fetchMeets = async () => {
-      setLoading(true); // Start loading
-      setError(null); // Reset any previous errors
-
+      setLoading(true);
+      setError(null);
       try {
         const response = await fetch('/api/meet', {
           method: "GET",
           credentials: 'include'
         });
-
         const data = await response.json();
         if (!response.ok) throw (data);
-        setMeets(data || []); // Assuming your API returns an array of meets
+        setMeets(data || []);
       } catch (error) {
-        setError(error.message); // Set error message
+        setError(error.message);
       } finally {
-        setLoading(false); // End loading
+        setLoading(false);
       }
     };
 
@@ -49,13 +47,10 @@ const Dashboard = () => {
 
   const handleToggleChange = async () => {
     setAutoEnabled(!autoEnabled);
-
     try {
       await fetch('/api/auto-enabled', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ autoEnabled: !autoEnabled }),
       });
@@ -65,51 +60,43 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="relative min-h-screen flex flex-col items-center p-6">
-      <div className="flex justify-between w-full items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Meet Dashboard</h1>
+    <div className="dashboard-page">
+      <div className="dashboard-header">
+        <h1 className="dashboard-title">Meet Dashboard</h1>
 
-        <div className="flex items-center">
-          <span className="mr-2 text-gray-700">Get email report after every meet</span>
+        <div className="toggle-container">
+          <span className="toggle-label">Auto email reports</span>
           <button
-            className={`relative inline-flex items-center h-6 rounded-full w-11 focus:outline-none ${autoEnabled ? 'bg-blue-500' : 'bg-gray-300'}`}
+            className={`toggle-btn ${autoEnabled ? 'toggle-btn-on' : 'toggle-btn-off'}`}
             onClick={handleToggleChange}
           >
-            <span
-              className={`inline-block w-5 h-5 transform bg-white rounded-full transition-transform ${
-                autoEnabled ? 'translate-x-5' : 'translate-x-1'
-              }`}
-            />
+            <span className={`toggle-knob ${autoEnabled ? 'toggle-knob-on' : 'toggle-knob-off'}`} />
           </button>
         </div>
       </div>
 
-      {/* Loading State */}
       {loading && (
-        <div className="flex flex-col items-center justify-center mt-10">
-          <FaSpinner className="animate-spin text-blue-500 text-4xl mb-2" />
-          <span className="text-xl font-semibold text-blue-500">Loading meets...</span>
+        <div className="dashboard-empty">
+          <FaSpinner className="icon" style={{ animation: 'spin 1s linear infinite', color: 'var(--accent-purple)' }} />
+          <span style={{ color: 'var(--text-secondary)' }}>Loading meets...</span>
         </div>
       )}
 
-      {/* Error State */}
       {error && (
-        <div className="flex flex-col items-center justify-center mt-10">
-          <FaExclamationCircle className="text-red-500 text-4xl mb-2" />
-          <span className="text-xl font-semibold text-red-500">{error}</span>
+        <div className="dashboard-empty">
+          <FaExclamationCircle className="icon" style={{ color: '#f87171' }} />
+          <span style={{ color: '#f87171' }}>{error}</span>
         </div>
       )}
 
-      {/* No Meets Available State */}
       {!loading && !error && meets.length === 0 && (
-        <div className="flex flex-col items-center justify-center mt-10">
-          <FaCalendarTimes className="text-gray-500 text-4xl mb-2" />
-          <span className="text-xl font-semibold text-gray-500">No meets available.</span>
+        <div className="dashboard-empty">
+          <FaCalendarTimes className="icon" style={{ color: 'var(--text-muted)' }} />
+          <span>No meets available.</span>
         </div>
       )}
 
-      {/* Meet Cards */}
-      <div className="flex flex-wrap justify-center mt-6">
+      <div className="dashboard-grid">
         {meets.map(meet => (
           <MeetCard
             key={meet._id}
@@ -120,9 +107,8 @@ const Dashboard = () => {
         ))}
       </div>
 
-      {/* Dim background when modal is open */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black opacity-50 z-40"></div>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 40 }} />
       )}
     </div>
   );

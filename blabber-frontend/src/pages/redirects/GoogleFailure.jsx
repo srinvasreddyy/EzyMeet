@@ -12,10 +12,11 @@ function GoogleFailure() {
   }, [navigate]);
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <div className="p-6 max-w-md mx-auto bg-white rounded-xl shadow-md space-y-4 text-center">
-        <h1 className="text-2xl font-bold text-red-600">Login failed!</h1>
-        <p className="text-gray-700">You'll be redirected to the login page in a while...</p>
+    <div className="status-page">
+      <div className="status-card">
+        <div className="status-icon">❌</div>
+        <h1 className="status-title status-title-error">Login Failed</h1>
+        <p className="status-text">Something went wrong. Redirecting you to sign in...</p>
       </div>
     </div>
   );

@@ -1,9 +1,17 @@
 import { Link } from 'react-router-dom';
 import { useAuthContext } from '../context/AuthContext';
 import { toast } from 'react-toastify';
+import { useState, useEffect } from 'react';
 
 function Navbar() {
   const { state, dispatch } = useAuthContext();
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 30);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   async function handleLogout() {
     await fetch("/api/oauth/logout");
@@ -12,41 +20,29 @@ function Navbar() {
   }
 
   return (
-    <nav className="bg-purple-900 p-4 flex justify-between items-center">
-      {/* Left side - EzyMeet logo */}
-      <div className="text-white text-2xl font-bold hover:rounded-lg hover:bg-white p-1">
-        <Link to="/" className="nav-name">
-          EzyMeet
-        </Link>
-      </div>
+    <nav className={`navbar ${scrolled ? 'scrolled' : ''}`}>
+      <Link to="/" className="navbar-logo">
+        EzyMeet
+      </Link>
 
-      {/* Right side - Navigation links and user greeting */}
-      <div className="flex items-center space-x-4">
+      <div className="navbar-links">
         {state?.user ? (
           <>
-           <Link to="/" className="text-white hover:text-blue-900 hover:rounded-lg hover:bg-white p-1">
-              Home
-            </Link>
-             <Link to="/dashboard" className="text-white hover:text-blue-900 hover:rounded-lg hover:bg-white p-1">
-              Dashboard
-            </Link>
-            <span className="text-white text-lg">
-              Hey, <strong>{state.user.name}</strong>!
+            <Link to="/" className="navbar-link">Home</Link>
+            <Link to="/dashboard" className="navbar-link">Dashboard</Link>
+            <span className="navbar-user">
+              Hey, <strong>{state.user.name}</strong>
             </span>
-            <button
-              onClick={handleLogout}
-              className="bg-red-600 text-white py-1 px-2 rounded-lg hover:bg-red-700 transition"
-            >
+            <button onClick={handleLogout} className="navbar-btn navbar-btn-logout">
               Logout
             </button>
           </>
         ) : (
           <>
-            <Link to="/" className="text-white hover:text-blue-900 hover:rounded-lg hover:bg-white p-1">
-              Home
-            </Link>
-            <Link to="/login" className="text-white hover:text-blue-900 hover:rounded-lg hover:bg-white p-1">
-              Login
+            <Link to="/" className="navbar-link">Home</Link>
+            <Link to="/welcome" className="navbar-link">About</Link>
+            <Link to="/login" className="navbar-btn navbar-btn-primary" id="nav-signin">
+              Sign In
             </Link>
           </>
         )}
