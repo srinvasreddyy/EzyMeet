@@ -67,6 +67,9 @@ app.use(cookieParser());
 app.use(express.json());
 app.use(passport.initialize());
 
+// Serve screenshots statically
+app.use('/api/screenshots', express.static(path.join(__dirname, 'screenshots')));
+
 mongoose.connect(MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,

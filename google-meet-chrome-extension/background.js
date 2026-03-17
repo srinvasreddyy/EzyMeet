@@ -1,55 +1,7 @@
 chrome.runtime.onInstalled.addListener(() => {
-    chrome.identity.getAuthToken({ interactive: true }, function (token) {
-        if (chrome.runtime.lastError || !token) {
-            console.log("Token", token);
-            console.error(chrome.runtime.lastError);
-            return;
-        }
-
-        // Fetch user info
-        fetch('https://www.googleapis.com/oauth2/v1/userinfo?alt=json', {
-            headers: {
-                Authorization: 'Bearer ' + token
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            // Store user information in Chrome storage
-            chrome.storage.local.set({ 
-                oauthEmail: data.email,
-                oauthName: data.name 
-            }, function() {
-                console.log(data.email, data.name);
-                console.log('User information stored in Chrome storage.');
-
-                // Make fetch request to your API endpoint
-                fetch('http://localhost:3000/api/register-from-extension', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        email: data.email,
-                        name: data.name
-                    })
-                })
-                .then(result => {
-                    console.log('User registered:', result);
-                })
-                .catch(error => {
-                    console.error('Error registering user:', error);
-                });
-            });
-        })
-        .catch(error => {
-            console.error('Error fetching user info:', error);
-        });
-    });
-
     chrome.tabs.create({
         url: 'http://localhost:5173/welcome' // Replace with your desired URL
-      });
-
+    });
 });
 
 
@@ -76,6 +28,49 @@ function downloadScreenshot(dataUrl) {
 
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === "authenticate") {
+        chrome.identity.getAuthToken({ interactive: true }, function (token) {
+            if (chrome.runtime.lastError || !token) {
+                console.error("Auth error:", chrome.runtime.lastError);
+                sendResponse({ success: false, error: chrome.runtime.lastError?.message || "Authentication failed" });
+                return;
+            }
+
+            // Fetch user info using the token
+            fetch('https://www.googleapis.com/oauth2/v1/userinfo?alt=json', {
+                headers: { Authorization: 'Bearer ' + token }
+            })
+            .then(response => response.json())
+            .then(data => {
+                chrome.storage.local.set({
+                    oauthEmail: data.email,
+                    oauthName: data.name
+                }, function () {
+                    console.log('User information stored in Chrome storage.');
+
+                    fetch('http://localhost:3000/api/register-from-extension', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: data.email, name: data.name })
+                    })
+                    .then(result => {
+                        console.log('User registered:', result);
+                        sendResponse({ success: true, email: data.email });
+                    })
+                    .catch(error => {
+                        console.error('Error registering user:', error);
+                        sendResponse({ success: true, email: data.email });
+                    });
+                });
+            })
+            .catch(error => {
+                console.error('Error fetching user info:', error);
+                sendResponse({ success: false, error: error.message });
+            });
+        });
+        return true; // Keep the messaging channel open for asynchronous response
+    }
+
     if (message.action === "capture_screenshot") {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
           const currentTab = tabs[0];
@@ -141,16 +136,16 @@ function storeScreenshotUrl(dataUrl) {
     // Generate a unique filename using the current timestamp
     const uniqueFilename = `screenshot_${Date.now()}.png`;
 
-    // Fetch the blabberEmail from Chrome storage
+    // Fetch the ezymeetEmail from Chrome storage
     chrome.storage.local.get('oauthEmail', (result) => {
-        const blabberEmail = result.oauthEmail;
+        const ezymeetEmail = result.oauthEmail;
 
-        if (blabberEmail) {
+        if (ezymeetEmail) {
             // Prepare the data to send to your backend
             const payload = {
                 filename: uniqueFilename,
                 imageData: dataUrl,
-                email: blabberEmail // Include the email in the payload
+                email: ezymeetEmail // Include the email in the payload
             };
 
             // Make a network request to your backend to send the image
@@ -165,25 +160,25 @@ function storeScreenshotUrl(dataUrl) {
             .then(data => {
                 console.log('Screenshot sent to backend successfully:', data);
                 // Update the screenshots array in Chrome storage
-                updateScreenshotsInStorage(uniqueFilename, blabberEmail);
+                updateScreenshotsInStorage(uniqueFilename, ezymeetEmail);
             })
             .catch((error) => {
                 console.error('Error sending screenshot to backend:', error);
             });
         } else {
-            console.error('blabberEmail not found in storage.');
+            console.error('ezymeetEmail not found in storage.');
         }
     });
 }
 
 // Function to update the screenshots array in Chrome storage
-function updateScreenshotsInStorage(uniqueFilename, blabberEmail) {
+function updateScreenshotsInStorage(uniqueFilename, ezymeetEmail) {
     const timestamp = new Date().toISOString();
     console.log(uniqueFilename)
     const screenshotEntry = {
         filename: `${uniqueFilename}`,
         timestamp: timestamp,
-        takenBy: blabberEmail
+        takenBy: ezymeetEmail
     };
 
     chrome.storage.local.get({ screenshots: [] }, (result) => {

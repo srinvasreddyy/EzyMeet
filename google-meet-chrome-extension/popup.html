@@ -2,7 +2,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Blabber - Generate custom meeting recaps, reports, and transcripts using AI</title>
+  <title>EzyMeet - Generate custom meeting recaps, reports, and transcripts using AI</title>
   
   <style>
     body {
@@ -23,6 +23,7 @@
       font-weight: bold;
       background: -webkit-linear-gradient(#00b7c5, #5800c5);
       -webkit-background-clip: text;
+      background-clip: text;
       -webkit-text-fill-color: transparent;
       margin-bottom: 10px;
     }
@@ -84,9 +85,15 @@
 
 <body>
   <div class="wrapper-div">
-    <h1 class="logo">Blabber</h1>
+    <h1 class="logo">EzyMeet</h1>
     <p class="details">Generate custom meeting recaps, reports, and transcripts using AI</p>
     <p id="email"></p>
+    <div class="not-signed-in" style="display: none;">
+      <p class="all-set">Please sign in to use EzyMeet</p>
+      <div class="action-buttons">
+        <button id="sign-in-btn" style="background-color: #7114b7; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1rem;">Sign in with Google</button>
+      </div>
+    </div>
     <div class="signed-in-only">
       <p class="all-set">You are all set!</p>
       <div class="action-buttons">

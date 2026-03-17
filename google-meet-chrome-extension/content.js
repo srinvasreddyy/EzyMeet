@@ -8,11 +8,11 @@ const timeFormat = {
   minute: '2-digit',
   hour24: true
 }
-const extensionStatusJSON_bug = {
-  "status": 400,
-  "message": "<strong>Blabber encountered a new error</strong> <br /> Please report it <a href='https://github.com/sikehish/blabber/issues' target='_blank'>here</a>."
+const extensionStatusJSON = {
+  "status": 500,
+  "message": "<strong>EzyMeet encountered a new error</strong> <br /> Please report it <a href='https://github.com/sikehish/ezymeet/issues' target='_blank'>here</a>."
 }
-const reportErrorMessage = "There is a bug in Blabber. Please report it at https://github.com/sikehish/blabber/issues"
+const reportErrorMessage = "There is a bug in EzyMeet. Please report it at https://github.com/sikehish/ezymeet/issues"
 const mutationConfig = { childList: true, attributes: true, subtree: true }
 
 // Name of the person attending the meeting
@@ -45,17 +45,17 @@ let hasMeetingStarted = false
 // Capture meeting end to suppress any errors
 let hasMeetingEnded = false
 
-let extensionStatusJSON
+let extensionStatusJSON_current
 
 
 checkExtensionStatus().then(() => {
   // Read the status JSON
   chrome.storage.local.get(["extensionStatusJSON"], function (result) {
-    extensionStatusJSON = result.extensionStatusJSON;
-    console.log("Extension status " + extensionStatusJSON.status);
+    extensionStatusJSON_current = result.extensionStatusJSON;
+    console.log("Extension status " + extensionStatusJSON_current.status);
 
     // Enable extension functions only if status is 200
-    if (extensionStatusJSON.status == 200) {
+    if (extensionStatusJSON_current.status == 200) {
       // NON CRITICAL DOM DEPENDENCY. Attempt to get username before meeting starts. Abort interval if valid username is found or if meeting starts and default to "You".
       checkElement(".awLEm").then(() => {
         // Poll the element until the textContent loads from network or until meeting starts
@@ -80,7 +80,7 @@ checkExtensionStatus().then(() => {
     }
     else {
       // Show downtime message as extension status is 400
-      showNotification(extensionStatusJSON)
+      showNotification(extensionStatusJSON_current)
     }
   })
 })
@@ -89,7 +89,7 @@ checkExtensionStatus().then(() => {
 async function checkExtensionStatus() {
   // Set default value as 200
   chrome.storage.local.set({
-    extensionStatusJSON: { status: 200, message: "<strong>Blabber is running</strong> <br /> Do not turn off captions" },
+    extensionStatusJSON: { status: 200, message: "<strong>EzyMeet is running</strong> <br /> Do not turn off captions" },
   });
 
   // https://stackoverflow.com/a/42518434
@@ -100,7 +100,7 @@ async function checkExtensionStatus() {
     .then((response) => response.json())
     .then((result) => {
       // Write status to chrome local storage
-      result.message = "<strong>Blabber is running</strong> <br /> Do not turn off captions";
+      result.message = "<strong>EzyMeet is running</strong> <br /> Do not turn off captions";
       chrome.storage.local.set({ extensionStatusJSON: result }, function () {
         console.log("Extension status fetched and saved")
       });
@@ -165,20 +165,31 @@ function meetingRoutines(uiType) {
           captionsButton.click()
       })
 
+      let transcriptObserver;
       // CRITICAL DOM DEPENDENCY. Grab the transcript element. This element is present, irrespective of captions ON/OFF, so this executes independent of operation mode.
-      const transcriptTargetNode = document.querySelector('.a4cQT')
-      // Attempt to dim down the transcript
-      try {
-        transcriptTargetNode.firstChild.style.opacity = 0.2
-      } catch (error) {
-        console.error(error)
+      const observeTranscript = () => {
+        const transcriptTargetNode = document.querySelector('.a4cQT')
+        if (!transcriptTargetNode) {
+          setTimeout(observeTranscript, 1000)
+          return
+        }
+
+        // Attempt to dim down the transcript
+        try {
+          if (transcriptTargetNode.firstChild) {
+            transcriptTargetNode.firstChild.style.opacity = 0.2
+          }
+        } catch (error) {
+          console.error(error)
+        }
+
+        // Create transcript observer instance linked to the callback function. Registered irrespective of operation mode, so that any visible transcript can be picked up during the meeting, independent of the operation mode.
+        transcriptObserver = new MutationObserver(transcriber)
+
+        // Start observing the transcript element and chat messages element for configured mutations
+        transcriptObserver.observe(transcriptTargetNode, mutationConfig)
       }
-
-      // Create transcript observer instance linked to the callback function. Registered irrespective of operation mode, so that any visible transcript can be picked up during the meeting, independent of the operation mode.
-      const transcriptObserver = new MutationObserver(transcriber)
-
-      // Start observing the transcript element and chat messages element for configured mutations
-      transcriptObserver.observe(transcriptTargetNode, mutationConfig)
+      observeTranscript()
 
       // **** CHAT MESSAGES ROUTINES **** //
       const chatMessagesButton = contains(".google-symbols", "chat")[0]
@@ -189,25 +200,33 @@ function meetingRoutines(uiType) {
       setTimeout(() => {
         chatMessagesButton.click()
         // CRITICAL DOM DEPENDENCY. Grab the chat messages element. This element is present, irrespective of chat ON/OFF, once it appears for this first time.
-        try {
-          const chatMessagesTargetNode = document.querySelectorAll('div[aria-live="polite"]')[0]
+        const observeChat = () => {
+          try {
+            const chatNodes = document.querySelectorAll('div[aria-live="polite"]')
+            if (chatNodes.length === 0 || !chatNodes[0]) {
+              setTimeout(observeChat, 1000)
+              return
+            }
+            const chatMessagesTargetNode = chatNodes[0]
 
-          // Create chat messages observer instance linked to the callback function. Registered irrespective of operation mode.
-          chatMessagesObserver = new MutationObserver(chatMessagesRecorder)
+            // Create chat messages observer instance linked to the callback function. Registered irrespective of operation mode.
+            chatMessagesObserver = new MutationObserver(chatMessagesRecorder)
 
-          chatMessagesObserver.observe(chatMessagesTargetNode, mutationConfig)
-        } catch (error) {
-          console.error(error)
-          showNotification(extensionStatusJSON_bug)
+            chatMessagesObserver.observe(chatMessagesTargetNode, mutationConfig)
+          } catch (error) {
+            console.error(error)
+            showNotification(extensionStatusJSON)
+          }
         }
-      }, 500)
+        observeChat()
+      }, 1500) // Increased delay to 1.5s to give the chat panel more time to open
 
       // Show confirmation message from extensionStatusJSON, once observation has started, based on operation mode
       chrome.storage.sync.get(["operationMode"], function (result) {
         if (result.operationMode == "manual")
-          showNotification({ status: 400, message: "<strong>Blabber is not running</strong> <br /> Turn on captions using the CC icon, if needed" })
+          showNotification({ status: 400, message: "<strong>EzyMeet is not running</strong> <br /> Turn on captions using the CC icon, if needed" })
         else
-          showNotification(extensionStatusJSON)
+          showNotification(extensionStatusJSON_current)
       })
 
 
@@ -216,8 +235,8 @@ function meetingRoutines(uiType) {
       contains(meetingEndIconData.selector, meetingEndIconData.text)[0].parentElement.parentElement.addEventListener("click", () => {
         // To suppress further errors
         hasMeetingEnded = true
-        transcriptObserver.disconnect()
-        chatMessagesObserver.disconnect()
+        if (transcriptObserver) transcriptObserver.disconnect()
+        if (chatMessagesObserver) chatMessagesObserver.disconnect()
 
         // Push any data in the buffer variables to the transcript array, but avoid pushing blank ones. Needed to handle one or more speaking when meeting ends.
         if ((personNameBuffer != "") && (transcriptTextBuffer != ""))
@@ -227,7 +246,7 @@ function meetingRoutines(uiType) {
       })
     } catch (error) {
       console.error(error)
-      showNotification(extensionStatusJSON_bug)
+      showNotification(extensionStatusJSON)
     }
   })
 }
@@ -323,7 +342,6 @@ function showNotification(extensionStatusJSON) {
     
     // Logo image
     let logo = document.createElement("img");
-    let logoText = document.createElement("p");
     
     // Notification text
     let text = document.createElement("p");
@@ -333,11 +351,14 @@ function showNotification(extensionStatusJSON) {
     divider.style.cssText = dividerCSS;
   
     logo.setAttribute("src", "https://i.imgur.com/pgOwCjJ.png");
-    logo.style.cssText = logoImgCSS;
+    logo.style.marginRight = "5px"; // Adjust margin as needed
   
-    // Blabber text next to the logo
-    logoText.style.cssText = logoTextCSS;
-    logoText.innerHTML = "Blabber";
+    // EzyMeet text next to the logo
+    let logoText = document.createElement("span");
+    logoText.innerHTML = "EzyMeet";
+    logoText.style.fontWeight = "bold";
+    logoText.style.fontSize = "16px"; // Adjust font size as needed
+    logoText.style.color = "white"; // Adjust text color as needed
     
     // Message text styling
     text.style.cssText = messageCSS;
@@ -379,14 +400,18 @@ function transcriber(mutationsList, observer) {
         // Get the last person
         const person = people[people.length - 1]
         // CRITICAL DOM DEPENDENCY
-        const currentPersonName = person.childNodes[0].textContent
+        const currentPersonName = person.childNodes[0]?.textContent || "";
+        if (!currentPersonName) return;
+        
         if(currentPersonName!="You") {
           speakers.add(currentPersonName)          
           overWriteChromeStorage(["speakers"], false)
         }
 
         // CRITICAL DOM DEPENDENCY
-        const currentTranscriptText = person.childNodes[1].lastChild.textContent
+        const currentTranscriptText = person.childNodes[1]?.lastChild?.textContent;
+
+        if (!currentTranscriptText) return;
 
         // Starting fresh in a meeting or resume from no active transcript
         if (beforeTranscriptText == "") {
@@ -413,7 +438,7 @@ function transcriber(mutationsList, observer) {
             transcriptTextBuffer = currentTranscriptText
             // Update buffers for next mutation
             beforeTranscriptText = currentTranscriptText
-            // If a person is speaking for a long time, Google Meet does not keep the entire text in the spans. Starting parts are automatically removed in an unpredictable way as the length increases and Blabber will miss them. So we force remove a lengthy transcript node in a controlled way. Google Meet will add a fresh person node when we remove it and continue transcription. Blabber picks it up as a new person and nothing is missed.
+            // If a person is speaking for a long time, Google Meet does not keep the entire text in the spans. Starting parts are automatically removed in an unpredictable way as the length increases and EzyMeet will miss them. So we force remove a lengthy transcript node in a controlled way. Google Meet will add a fresh person node when we remove it and continue transcription. EzyMeet picks it up as a new person and nothing is missed.
             if (currentTranscriptText.length > 250)
               person.remove()
           }
@@ -440,7 +465,7 @@ function transcriber(mutationsList, observer) {
       console.error(error)
       if (isTranscriptDomErrorCaptured == false && hasMeetingEnded == false) {
         console.log(reportErrorMessage)
-        showNotification(extensionStatusJSON_bug)
+        showNotification(extensionStatusJSON)
       }
       isTranscriptDomErrorCaptured = true
     }
@@ -454,14 +479,16 @@ function chatMessagesRecorder(mutationsList, observer) {
       // CRITICAL DOM DEPENDENCY. Get all people in the transcript
       const chatMessagesElement = document.querySelectorAll('div[aria-live="polite"]')[0]
       // Attempt to parse messages only if at least one message exists
-      if (chatMessagesElement.children.length > 0) {
+      if (chatMessagesElement && chatMessagesElement.children.length > 0) {
         // CRITICAL DOM DEPENDENCY. Get the last message that was sent/received.
         const chatMessageElement = chatMessagesElement.lastChild
         // CRITICAL DOM DEPENDENCY.
-        const personName = chatMessageElement.firstChild.firstChild.textContent
+        const personName = chatMessageElement?.firstChild?.firstChild?.textContent
         const timeStamp = new Date().toLocaleString("default", timeFormat).toUpperCase()
         // CRITICAL DOM DEPENDENCY. Some mutations will have some noisy text at the end, which is handled in pushUniqueChatBlock function.
-        const chatMessageText = chatMessageElement.lastChild.lastChild.textContent
+        const chatMessageText = chatMessageElement?.lastChild?.lastChild?.textContent
+
+        if (!personName || !chatMessageText) return;
 
         const chatMessageBlock = {
           personName: personName,
@@ -479,7 +506,7 @@ function chatMessagesRecorder(mutationsList, observer) {
       console.error(error)
       if (isChatMessagesDomErrorCaptured == false && hasMeetingEnded == false) {
         console.log(reportErrorMessage)
-        showNotification(extensionStatusJSON_bug)
+        showNotification(extensionStatusJSON)
       }
       isChatMessagesDomErrorCaptured = true
     }

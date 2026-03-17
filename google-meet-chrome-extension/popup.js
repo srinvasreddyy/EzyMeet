@@ -3,13 +3,26 @@ window.onload = function () {
     if (result.oauthEmail) {
       document.querySelector("#email").innerText = `Logged in as ${result.oauthEmail}!`;
       document.querySelector(".signed-in-only").style.display = "block";
+      document.querySelector(".not-signed-in").style.display = "none";
     } else {
       document.querySelector("#email").innerText = "Not signed in!";
       document.querySelector(".signed-in-only").style.display = "none";
+      document.querySelector(".not-signed-in").style.display = "block";
     }
-  }
-  )
-}
+  });
+};
+
+document.getElementById('sign-in-btn').addEventListener('click', function() {
+  chrome.runtime.sendMessage({ action: "authenticate" }, (response) => {
+    if (response && response.success) {
+      window.location.reload();
+    } else {
+      const errField = document.querySelector("#email");
+      errField.innerText = "Auth Error: " + (response ? response.error : "Unknown error");
+      errField.style.color = "red";
+    }
+  });
+});
 
 document.getElementById('view-meetings').addEventListener('click', function () {
   chrome.tabs.create({ url: 'http://localhost:5173/dashboard' });

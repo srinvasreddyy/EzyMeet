@@ -1,5 +1,5 @@
 {
-  "name": "Blabber",
+  "name": "EzyMeet",
   "version": "1.0",
   "manifest_version": 3,
   "description": "Simple Google Meet transcripts. Private and open source.",
@@ -40,10 +40,10 @@
     "service_worker": "background.js"
   },
   "oauth2": {
-    "client_id": "114382536282-fe6h8nbnahi5gq1kmeah6fglnobrl5t1.apps.googleusercontent.com",
+    "client_id": "453297841831-oor607gt2qb9euhvbfa0sc550t1cd7t7.apps.googleusercontent.com",
     "scopes": [
       "https://www.googleapis.com/auth/userinfo.email",
-      "https://www.googleapis.com/auth/userinfo.profile"  
+      "https://www.googleapis.com/auth/userinfo.profile"
     ]
   }
 }

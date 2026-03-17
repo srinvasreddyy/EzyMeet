@@ -180,6 +180,30 @@ const reportTypes = [
                         <p><strong>Attendees:</strong> {meet.attendees?.length > 0 ? meet.attendees.join(', ') : 'No attendees'}</p>
                     </div>
 
+                    {meet.screenshots && meet.screenshots.length > 0 && (
+                        <>
+                            <div className="meet-divider"></div>
+                            <div className="meet-screenshots">
+                                <p className="mb-2"><strong>Screenshots:</strong></p>
+                                <div className="flex overflow-x-auto gap-3 pb-2 custom-scrollbar">
+                                    {meet.screenshots.map((screenshot, index) => (
+                                        <div key={index} className="flex-shrink-0 relative group rounded-lg overflow-hidden border border-[rgba(255,255,255,0.1)]">
+                                            <img 
+                                                src={`/api/screenshots/${meet.blabberEmail}/${screenshot.filename}`} 
+                                                alt={`Screenshot from ${formatTime(screenshot.timestamp)}`}
+                                                className="h-24 object-cover cursor-pointer hover:scale-105 transition-transform duration-300"
+                                                onClick={() => window.open(`/api/screenshots/${meet.blabberEmail}/${screenshot.filename}`, '_blank')}
+                                            />
+                                            <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] p-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                By: {screenshot.takenBy}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </>
+                    )}
+
                     <button
                         onClick={openModal}
                         className="btn-primary mt-4"
