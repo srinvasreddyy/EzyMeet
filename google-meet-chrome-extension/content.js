@@ -1,126 +1,81 @@
 //*********** GLOBAL VARIABLES **********//
-const timeFormat = {
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  second: '2-digit',
-  minute: '2-digit',
-  hour24: true
-}
 const extensionStatusJSON = {
   "status": 500,
   "message": "<strong>EzyMeet encountered a new error</strong> <br /> Please report it <a href='https://github.com/sikehish/ezymeet/issues' target='_blank'>here</a>."
 }
-const reportErrorMessage = "There is a bug in EzyMeet. Please report it at https://github.com/sikehish/ezymeet/issues"
 const mutationConfig = { childList: true, attributes: true, subtree: true }
 
-// Name of the person attending the meeting
 let userName = "You"
 overWriteChromeStorage(["userName"], false)
-// Transcript array that holds one or more transcript blocks
-// Each transcript block (object) has personName, timeStamp and transcriptText key value pairs
 let transcript = []
-// Buffer variables to dump values, which get pushed to transcript array as transcript blocks, at defined conditions
 let personNameBuffer = "", transcriptTextBuffer = "", timeStampBuffer = undefined
-// Buffer variables for deciding when to push a transcript block
 let beforePersonName = "", beforeTranscriptText = ""
-// Chat messages array that holds one or chat messages of the meeting
-// Each message block(object) has personName, timeStamp and messageText key value pairs
 let chatMessages = []
 overWriteChromeStorage(["chatMessages"], false)
 
 const speakers = new Set();
 
-// Capture meeting start timestamp and sanitize special characters with "-" to avoid invalid filenames
-let meetingStartTimeStamp = new Date().toLocaleString("default", timeFormat).replace(/[/:]/g, '-').toUpperCase()
-let meetingEndTimeStamp=""
+// Use ISO strings universally to prevent backend parsing errors
+let meetingStartTimeStamp = new Date().toISOString()
+let meetingEndTimeStamp = ""
 let meetingTitle = document.title
 overWriteChromeStorage(["meetingStartTimeStamp", "meetingTitle"], false)
-// Capture invalid transcript and chat messages DOM element error for the first time
 let isTranscriptDomErrorCaptured = false
 let isChatMessagesDomErrorCaptured = false
-// Capture meeting begin to abort userName capturing interval
 let hasMeetingStarted = false
-// Capture meeting end to suppress any errors
 let hasMeetingEnded = false
 
 let extensionStatusJSON_current
 
-
 checkExtensionStatus().then(() => {
-  // Read the status JSON
   chrome.storage.local.get(["extensionStatusJSON"], function (result) {
     extensionStatusJSON_current = result.extensionStatusJSON;
-    console.log("Extension status " + extensionStatusJSON_current.status);
 
-    // Enable extension functions only if status is 200
-    if (extensionStatusJSON_current.status == 200) {
-      // NON CRITICAL DOM DEPENDENCY. Attempt to get username before meeting starts. Abort interval if valid username is found or if meeting starts and default to "You".
+    if (extensionStatusJSON_current && extensionStatusJSON_current.status == 200) {
       checkElement(".awLEm").then(() => {
-        // Poll the element until the textContent loads from network or until meeting starts
         const captureUserNameInterval = setInterval(() => {
-          userName = document.querySelector(".awLEm").textContent
-          speakers.add(userName)
-          overWriteChromeStorage(["speakers"], false)
-          if (userName || hasMeetingStarted) {
-            clearInterval(captureUserNameInterval)
-            // Prevent overwriting default "You" where element is found, but valid userName is not available
-            if (userName != "")
-              overWriteChromeStorage(["userName"], false)
+          const nameElement = document.querySelector(".awLEm");
+          if (nameElement) {
+            userName = nameElement.textContent;
+            speakers.add(userName);
+            overWriteChromeStorage(["speakers"], false);
+            if (userName || hasMeetingStarted) {
+              clearInterval(captureUserNameInterval);
+              if (userName != "") overWriteChromeStorage(["userName"], false);
+            }
+          } else if (hasMeetingStarted) {
+            clearInterval(captureUserNameInterval);
           }
-        }, 100)
+        }, 100);
       })
 
-      // 1. Meet UI prior to July/Aug 2024
       meetingRoutines(1)
-
-      // 2. Meet UI post July/Aug 2024
       meetingRoutines(2)
-    }
-    else {
-      // Show downtime message as extension status is 400
-      showNotification(extensionStatusJSON_current)
+    } else {
+      showNotification(extensionStatusJSON_current || extensionStatusJSON)
     }
   })
 })
 
-// Fetches extension status from GitHub and saves to chrome storage. Defaults to 200, if remote server is unavailable.
 async function checkExtensionStatus() {
-  // Set default value as 200
   chrome.storage.local.set({
     extensionStatusJSON: { status: 200, message: "<strong>EzyMeet is running</strong> <br /> Do not turn off captions" },
   });
 
-  // https://stackoverflow.com/a/42518434
-  await fetch(
-    "https://ejnana.github.io/transcripto-status/status-prod.json",
-    { cache: "no-store" }
-  )
-    .then((response) => response.json())
-    .then((result) => {
-      // Write status to chrome local storage
-      result.message = "<strong>EzyMeet is running</strong> <br /> Do not turn off captions";
-      chrome.storage.local.set({ extensionStatusJSON: result }, function () {
-        console.log("Extension status fetched and saved")
-      });
-    })
-    .catch((err) => {
-      console.log(err);
-    });
+  try {
+    const response = await fetch("https://ejnana.github.io/transcripto-status/status-prod.json", { cache: "no-store" });
+    const result = await response.json();
+    result.message = "<strong>EzyMeet is running</strong> <br /> Do not turn off captions";
+    chrome.storage.local.set({ extensionStatusJSON: result });
+  } catch (err) {
+    console.error("Status fetch failed:", err);
+  }
 }
 
-
 function meetingRoutines(uiType) {
-  const meetingEndIconData = {
-    selector: "",
-    text: ""
-  }
-  const captionsIconData = {
-    selector: "",
-    text: ""
-  }
-  // Different selector data for different UI versions
+  const meetingEndIconData = { selector: "", text: "" }
+  const captionsIconData = { selector: "", text: "" }
+
   switch (uiType) {
     case 1:
       meetingEndIconData.selector = ".google-material-icons"
@@ -137,36 +92,27 @@ function meetingRoutines(uiType) {
       break;
   }
 
-  // CRITICAL DOM DEPENDENCY. Wait until the meeting end icon appears, used to detect meeting start
   checkElement(meetingEndIconData.selector, meetingEndIconData.text).then(() => {
-    console.log("Meeting started")
-    chrome.runtime.sendMessage({ type: "new_meeting_started" }, function (response) {
-      console.log(response);
+    console.info(`[EzyMeet Log] Meeting Started precisely at: ${meetingStartTimeStamp}`);
+    chrome.runtime.sendMessage({ type: "new_meeting_started" }, function () {
+      if (chrome.runtime.lastError) console.warn("Init msg error:", chrome.runtime.lastError.message);
     });
     hasMeetingStarted = true
 
-
-
     try {
-      //*********** MEETING START ROUTINES **********//
-      // Pick up meeting name after a delay, since Google meet updates meeting name after a delay
       setTimeout(() => updateMeetingTitle(), 5000)
 
-      // **** TRANSCRIPT ROUTINES **** //
-      // CRITICAL DOM DEPENDENCY
       const captionsButton = contains(captionsIconData.selector, captionsIconData.text)[0]
 
-
-      // Click captions icon for non manual operation modes. Async operation.
       chrome.storage.sync.get(["operationMode"], function (result) {
-        if (result.operationMode == "manual")
+        if (result.operationMode == "manual") {
           console.log("Manual mode selected, leaving transcript off")
-        else
+        } else if (captionsButton) {
           captionsButton.click()
+        }
       })
 
       let transcriptObserver;
-      // CRITICAL DOM DEPENDENCY. Grab the transcript element. This element is present, irrespective of captions ON/OFF, so this executes independent of operation mode.
       const observeTranscript = () => {
         const transcriptTargetNode = document.querySelector('.a4cQT')
         if (!transcriptTargetNode) {
@@ -174,7 +120,6 @@ function meetingRoutines(uiType) {
           return
         }
 
-        // Attempt to dim down the transcript
         try {
           if (transcriptTargetNode.firstChild) {
             transcriptTargetNode.firstChild.style.opacity = 0.2
@@ -183,23 +128,17 @@ function meetingRoutines(uiType) {
           console.error(error)
         }
 
-        // Create transcript observer instance linked to the callback function. Registered irrespective of operation mode, so that any visible transcript can be picked up during the meeting, independent of the operation mode.
         transcriptObserver = new MutationObserver(transcriber)
-
-        // Start observing the transcript element and chat messages element for configured mutations
         transcriptObserver.observe(transcriptTargetNode, mutationConfig)
       }
       observeTranscript()
 
-      // **** CHAT MESSAGES ROUTINES **** //
       const chatMessagesButton = contains(".google-symbols", "chat")[0]
-      // Force open chat messages to make the required DOM to appear. Otherwise, the required chatMessages DOM element is not available.
-      chatMessagesButton.click()
+      if (chatMessagesButton) chatMessagesButton.click()
       let chatMessagesObserver
-      // Allow DOM to be updated and then register chatMessage mutation observer
+
       setTimeout(() => {
-        chatMessagesButton.click()
-        // CRITICAL DOM DEPENDENCY. Grab the chat messages element. This element is present, irrespective of chat ON/OFF, once it appears for this first time.
+        if (chatMessagesButton) chatMessagesButton.click()
         const observeChat = () => {
           try {
             const chatNodes = document.querySelectorAll('div[aria-live="polite"]')
@@ -209,19 +148,15 @@ function meetingRoutines(uiType) {
             }
             const chatMessagesTargetNode = chatNodes[0]
 
-            // Create chat messages observer instance linked to the callback function. Registered irrespective of operation mode.
             chatMessagesObserver = new MutationObserver(chatMessagesRecorder)
-
             chatMessagesObserver.observe(chatMessagesTargetNode, mutationConfig)
           } catch (error) {
             console.error(error)
-            showNotification(extensionStatusJSON)
           }
         }
         observeChat()
-      }, 1500) // Increased delay to 1.5s to give the chat panel more time to open
+      }, 1500)
 
-      // Show confirmation message from extensionStatusJSON, once observation has started, based on operation mode
       chrome.storage.sync.get(["operationMode"], function (result) {
         if (result.operationMode == "manual")
           showNotification({ status: 400, message: "<strong>EzyMeet is not running</strong> <br /> Turn on captions using the CC icon, if needed" })
@@ -229,30 +164,28 @@ function meetingRoutines(uiType) {
           showNotification(extensionStatusJSON_current)
       })
 
+      const meetingEndBtn = contains(meetingEndIconData.selector, meetingEndIconData.text)[0]
+      if (meetingEndBtn && meetingEndBtn.parentElement && meetingEndBtn.parentElement.parentElement) {
+        meetingEndBtn.parentElement.parentElement.addEventListener("click", () => {
+          hasMeetingEnded = true
+          if (transcriptObserver) transcriptObserver.disconnect()
+          if (chatMessagesObserver) chatMessagesObserver.disconnect()
 
-      //*********** MEETING END ROUTINES **********//
-      // CRITICAL DOM DEPENDENCY. Event listener to capture meeting end button click by user
-      contains(meetingEndIconData.selector, meetingEndIconData.text)[0].parentElement.parentElement.addEventListener("click", () => {
-        // To suppress further errors
-        hasMeetingEnded = true
-        if (transcriptObserver) transcriptObserver.disconnect()
-        if (chatMessagesObserver) chatMessagesObserver.disconnect()
-
-        // Push any data in the buffer variables to the transcript array, but avoid pushing blank ones. Needed to handle one or more speaking when meeting ends.
-        if ((personNameBuffer != "") && (transcriptTextBuffer != ""))
-          pushBufferToTranscript()
-        // Save to chrome storage and send message to download transcript from background script
-        overWriteChromeStorage(["transcript", "chatMessages", "meetingEndTimeStamp"], true)
-      })
+          if ((personNameBuffer != "") && (transcriptTextBuffer != "")) {
+            pushBufferToTranscript()
+          }
+          
+          meetingEndTimeStamp = new Date().toISOString();
+          console.info(`[EzyMeet Log] End Call Button Clicked! End time recorded as: ${meetingEndTimeStamp}`);
+          overWriteChromeStorage(["transcript", "chatMessages", "meetingEndTimeStamp"], true)
+        })
+      }
     } catch (error) {
       console.error(error)
-      showNotification(extensionStatusJSON)
     }
   })
 }
 
-
-// Returns all elements of the specified selector type and specified textContent. Return array contains the actual element as well as all the upper parents. 
 function contains(selector, text) {
   var elements = document.querySelectorAll(selector);
   return Array.prototype.filter.call(elements, function (element) {
@@ -260,16 +193,12 @@ function contains(selector, text) {
   });
 }
 
-// Efficiently waits until the element of the specified selector and textContent appears in the DOM. Polls only on animation frame change
 const checkElement = async (selector, text) => {
   if (text) {
-    // loops for every animation frame change, until the required element is found
     while (!Array.from(document.querySelectorAll(selector)).find(element => element.textContent === text)) {
       await new Promise((resolve) => requestAnimationFrame(resolve));
     }
-  }
-  else {
-    // loops for every animation frame change, until the required element is found
+  } else {
     while (!document.querySelector(selector)) {
       await new Promise((resolve) => requestAnimationFrame(resolve));
     }
@@ -286,16 +215,16 @@ const commonCSS = `
     right: 0; 
     margin-left: auto; 
     margin-right: auto;
-    max-width: 350px;  /* Reduced max width for a more compact look */
+    max-width: 350px;
     z-index: 1000; 
-    padding: 0.75rem 1rem;  /* Reduced padding for a sleeker look */
+    padding: 0.75rem 1rem;
     border-radius: 8px; 
     display: flex; 
     justify-content: flex-start; 
     align-items: center; 
-    gap: 12px;  /* Reduced gap between items */
-    font-size: 0.9rem;  /* Smaller font size */
-    line-height: 1.4;  /* Tighter line spacing */
+    gap: 12px;
+    font-size: 0.9rem;
+    line-height: 1.4;
     font-family: 'Google Sans',Roboto,Arial,sans-serif; 
     box-shadow: rgba(0, 0, 0, 0.12) 0px 4px 12px, rgba(0, 0, 0, 0.05) 0px 0px 0px 1px;
     color: black;
@@ -307,185 +236,132 @@ const logoCSS = `
     justify-content: center;
 `;
 
-const logoImgCSS = `
-    width: 40px;  /* Smaller logo size */
-    height: 40px; 
-`;
-
-const logoTextCSS = `
-    font-size: 1rem;  /* Reduced font size */
-    font-weight: bold;
-    margin-left: 8px;  /* Space between icon and text */
-`;
-
 const dividerCSS = `
-    height: 60px;  /* Align height with logo */
+    height: 60px;
     width: 3px;
     background-color: rgba(0, 0, 0, 0.1);
     margin: 0 8px;
 `;
 
 const messageCSS = `
-    font-size: 0.9rem;  /* Smaller font size for message */
+    font-size: 0.9rem;
     font-weight: 500;
-    color: #2c3e50; /* Subtle color for message text */
+    color: #2c3e50;
 `;
 
 function showNotification(extensionStatusJSON) { 
-    // Banner container
     let html = document.querySelector("html");
+    if (!html) return;
+
     let obj = document.createElement("div");
-    
-    // Logo container
     let logoContainer = document.createElement("div");
     logoContainer.style.cssText = logoCSS;
-    
-    // Logo image
     let logo = document.createElement("img");
-    
-    // Notification text
     let text = document.createElement("p");
-    
-    // Divider
     let divider = document.createElement("div");
     divider.style.cssText = dividerCSS;
   
     logo.setAttribute("src", "https://i.imgur.com/pgOwCjJ.png");
-    logo.style.marginRight = "5px"; // Adjust margin as needed
+    logo.style.marginRight = "5px";
+    logo.style.width = "40px";
+    logo.style.height = "40px";
   
-    // EzyMeet text next to the logo
     let logoText = document.createElement("span");
     logoText.innerHTML = "EzyMeet";
     logoText.style.fontWeight = "bold";
-    logoText.style.fontSize = "16px"; // Adjust font size as needed
-    logoText.style.color = "white"; // Adjust text color as needed
+    logoText.style.fontSize = "16px";
+    logoText.style.color = "white";
     
-    // Message text styling
     text.style.cssText = messageCSS;
   
-    // Remove the banner after 5 seconds
     setTimeout(() => {
       obj.style.display = "none";
     }, 5000);
   
-    // Determine styles based on extension status
-    if (extensionStatusJSON.status == 200) {
+    if (extensionStatusJSON && extensionStatusJSON.status == 200) {
       obj.style.cssText = `background: #e0f7fa; color: black; ${commonCSS}`;
       text.innerHTML = "Don't disable captions!";
     } else {
       obj.style.cssText = `background: #ffebee; color: orange; ${commonCSS}`;
-      text.innerHTML = extensionStatusJSON.message;
+      text.innerHTML = extensionStatusJSON ? extensionStatusJSON.message : "Error";
     }
   
-    // Structure the notification banner
     logoContainer.append(logo);
     logoContainer.append(logoText);
-    
     obj.append(logoContainer);
     obj.append(divider);
     obj.append(text);
   
-    if (html) html.append(obj);
+    html.append(obj);
 }
 
-// Callback function to execute when transcription mutations are observed. 
 function transcriber(mutationsList, observer) {
-  // Delay for 1000ms to allow for text corrections by Meet.
   mutationsList.forEach(mutation => {
     try {
-      // CRITICAL DOM DEPENDENCY. Get all people in the transcript
-      const people = document.querySelector('.a4cQT').firstChild.firstChild.childNodes
-      // Begin parsing transcript
-      if (document.querySelector('.a4cQT')?.firstChild?.firstChild?.childNodes.length > 0) {
-        // Get the last person
+      const transcriptBox = document.querySelector('.a4cQT');
+      if (!transcriptBox || !transcriptBox.firstChild || !transcriptBox.firstChild.firstChild) return;
+
+      const people = transcriptBox.firstChild.firstChild.childNodes;
+      if (people.length > 0) {
         const person = people[people.length - 1]
-        // CRITICAL DOM DEPENDENCY
         const currentPersonName = person.childNodes[0]?.textContent || "";
         if (!currentPersonName) return;
         
-        if(currentPersonName!="You") {
+        if(currentPersonName != "You") {
           speakers.add(currentPersonName)          
           overWriteChromeStorage(["speakers"], false)
         }
 
-        // CRITICAL DOM DEPENDENCY
         const currentTranscriptText = person.childNodes[1]?.lastChild?.textContent;
-
         if (!currentTranscriptText) return;
 
-        // Starting fresh in a meeting or resume from no active transcript
         if (beforeTranscriptText == "") {
           personNameBuffer = currentPersonName
-          timeStampBuffer = new Date().toLocaleString("default", timeFormat).toUpperCase()
+          timeStampBuffer = new Date().toISOString()
           beforeTranscriptText = currentTranscriptText
           transcriptTextBuffer = currentTranscriptText
-        }
-        // Some prior transcript buffer exists
-        else {
-          // New person started speaking 
+        } else {
           if (personNameBuffer != currentPersonName) {
-            // Push previous person's transcript as a block
             pushBufferToTranscript()
             overWriteChromeStorage(["transcript"], false)
-            // Update buffers for next mutation and store transcript block timeStamp
             beforeTranscriptText = currentTranscriptText
             personNameBuffer = currentPersonName
-            timeStampBuffer = new Date().toLocaleString("default", timeFormat).toUpperCase()
+            timeStampBuffer = new Date().toISOString()
             transcriptTextBuffer = currentTranscriptText
-          }
-          // Same person speaking more
-          else {
+          } else {
             transcriptTextBuffer = currentTranscriptText
-            // Update buffers for next mutation
             beforeTranscriptText = currentTranscriptText
-            // If a person is speaking for a long time, Google Meet does not keep the entire text in the spans. Starting parts are automatically removed in an unpredictable way as the length increases and EzyMeet will miss them. So we force remove a lengthy transcript node in a controlled way. Google Meet will add a fresh person node when we remove it and continue transcription. EzyMeet picks it up as a new person and nothing is missed.
-            if (currentTranscriptText.length > 250)
+            if (currentTranscriptText.length > 250) {
               person.remove()
+            }
           }
         }
-      }
-      // No people found in transcript DOM
-      else {
-        // No transcript yet or the last person stopped speaking(and no one has started speaking next)
-        console.log("No active transcript")
-        // Push data in the buffer variables to the transcript array, but avoid pushing blank ones.
+      } else {
         if ((personNameBuffer != "") && (transcriptTextBuffer != "")) {
           pushBufferToTranscript()
           overWriteChromeStorage(["transcript"], false)
         }
-        // Update buffers for the next person in the next mutation
         beforePersonName = ""
         beforeTranscriptText = ""
         personNameBuffer = ""
         transcriptTextBuffer = ""
       }
-      console.log(transcriptTextBuffer)
-      // console.log(transcript)
     } catch (error) {
-      console.error(error)
-      if (isTranscriptDomErrorCaptured == false && hasMeetingEnded == false) {
-        console.log(reportErrorMessage)
-        showNotification(extensionStatusJSON)
-      }
       isTranscriptDomErrorCaptured = true
     }
   })
 }
 
-// Callback function to execute when chat messages mutations are observed. 
 function chatMessagesRecorder(mutationsList, observer) {
   mutationsList.forEach(mutation => {
     try {
-      // CRITICAL DOM DEPENDENCY. Get all people in the transcript
-      const chatMessagesElement = document.querySelectorAll('div[aria-live="polite"]')[0]
-      // Attempt to parse messages only if at least one message exists
+      const chatNodes = document.querySelectorAll('div[aria-live="polite"]');
+      const chatMessagesElement = chatNodes.length > 0 ? chatNodes[0] : null;
+
       if (chatMessagesElement && chatMessagesElement.children.length > 0) {
-        // CRITICAL DOM DEPENDENCY. Get the last message that was sent/received.
         const chatMessageElement = chatMessagesElement.lastChild
-        // CRITICAL DOM DEPENDENCY.
         const personName = chatMessageElement?.firstChild?.firstChild?.textContent
-        const timeStamp = new Date().toLocaleString("default", timeFormat).toUpperCase()
-        // CRITICAL DOM DEPENDENCY. Some mutations will have some noisy text at the end, which is handled in pushUniqueChatBlock function.
+        const timeStamp = new Date().toISOString()
         const chatMessageText = chatMessageElement?.lastChild?.lastChild?.textContent
 
         if (!personName || !chatMessageText) return;
@@ -496,24 +372,15 @@ function chatMessagesRecorder(mutationsList, observer) {
           chatMessageText: chatMessageText
         }
 
-        // Lot of mutations fire for each message, pick them only once
         pushUniqueChatBlock(chatMessageBlock)
-        overWriteChromeStorage(["chatMessages", false])
-        console.log(chatMessages)
+        overWriteChromeStorage(["chatMessages"], false)
       }
-    }
-    catch (error) {
-      console.error(error)
-      if (isChatMessagesDomErrorCaptured == false && hasMeetingEnded == false) {
-        console.log(reportErrorMessage)
-        showNotification(extensionStatusJSON)
-      }
+    } catch (error) {
       isChatMessagesDomErrorCaptured = true
     }
   })
 }
 
-// Pushes data in the buffer to transcript array as a transcript block
 function pushBufferToTranscript() {
   transcript.push({
     "personName": personNameBuffer,
@@ -522,148 +389,55 @@ function pushBufferToTranscript() {
   })
 }
 
-// Pushes object to array only if it doesn't already exist. chatMessage is checked for substring since some trailing text(keep Pin message) is present from a button that allows to pin the message.
 function pushUniqueChatBlock(chatBlock) {
   const isExisting = chatMessages.some(item =>
     item.personName == chatBlock.personName &&
     item.timeStamp == chatBlock.timeStamp &&
     chatBlock.chatMessageText.includes(item.chatMessageText)
   )
-  if (!isExisting)
-    chatMessages.push(chatBlock);
+  if (!isExisting) chatMessages.push(chatBlock);
 }
 
-// Saves specified variables to chrome storage. Optionally, can send message to background script to download, post saving.
 function overWriteChromeStorage(keys, endMeeting) {
   const objectToSave = {}
-  // Hard coded list of keys that are accepted
-  if (keys.includes("userName"))
-    objectToSave.userName = userName
-  if (keys.includes("transcript"))
-    objectToSave.transcript = transcript
-  if (keys.includes("meetingTitle"))
-    objectToSave.meetingTitle = meetingTitle
-  if (keys.includes("meetingStartTimeStamp"))
-    objectToSave.meetingStartTimeStamp = meetingStartTimeStamp
-  if (keys.includes("chatMessages"))
-    objectToSave.chatMessages = chatMessages
-  if (keys.includes("speakers")){
-    objectToSave.speakers = Array.from(speakers);
-    console.log(objectToSave.speakers);
-
-  }
+  if (keys.includes("userName")) objectToSave.userName = userName
+  if (keys.includes("transcript")) objectToSave.transcript = transcript
+  if (keys.includes("meetingTitle")) objectToSave.meetingTitle = meetingTitle
+  if (keys.includes("meetingStartTimeStamp")) objectToSave.meetingStartTimeStamp = meetingStartTimeStamp
+  if (keys.includes("chatMessages")) objectToSave.chatMessages = chatMessages
+  if (keys.includes("speakers")) objectToSave.speakers = Array.from(speakers);
     
-  if (keys.includes("meetingEndTimeStamp"))
-    objectToSave.meetingEndTimeStamp  = new Date().toLocaleString("default", timeFormat).replace(/[/:]/g, '-').toUpperCase()
+  if (keys.includes("meetingEndTimeStamp")) {
+    objectToSave.meetingEndTimeStamp = meetingEndTimeStamp;
+  }
 
-  if(endMeeting){
-    const attendeesArr=[]
+  if (endMeeting) {
+    const attendeesArr = []
     const attendees = document.querySelectorAll('div.dwSJ2e')
-    for (const attendee of attendees)   attendeesArr.push(attendee.textContent); 
-    console.log(attendeesArr)
-    objectToSave.attendees=attendeesArr 
+    for (const attendee of attendees) {
+      if(attendee && attendee.textContent) attendeesArr.push(attendee.textContent); 
+    }
+    objectToSave.attendees = attendeesArr 
   }
 
   chrome.storage.local.set(objectToSave, function () {
     if (endMeeting) {
-      
-      // console.log(attendice.map(el => el.textContent))
-      if (transcript.length > 0) {
-        chrome.runtime.sendMessage({ type: "end_meeting" }, function (response) {
-          console.log(response);
-        })
-      }
+      console.info(`[EzyMeet Log] Triggering backend dispatch. Total transcripts captured: ${transcript.length}`);
+      chrome.runtime.sendMessage({ type: "end_meeting" }, function () {
+          if (chrome.runtime.lastError) console.warn("Communication error during meeting end:", chrome.runtime.lastError.message);
+      });
     }
   })
 }
 
-// Grabs updated meeting title, if available. Replaces special characters with underscore to avoid invalid file names.
 function updateMeetingTitle() {
   try {
-    // NON CRITICAL DOM DEPENDENCY
-    const title = document.querySelector(".u6vdEc").textContent
-    const invalidFilenameRegex = /[^\w\-_.() ]/g
-    meetingTitle = title.replace(invalidFilenameRegex, '_')
-    overWriteChromeStorage(["meetingTitle"], false)
-  } catch (error) {
-    console.error(error)
-  }
+    const titleNode = document.querySelector(".u6vdEc");
+    if (titleNode) {
+      const title = titleNode.textContent;
+      const invalidFilenameRegex = /[^\w\-_.() ]/g;
+      meetingTitle = title.replace(invalidFilenameRegex, '_');
+      overWriteChromeStorage(["meetingTitle"], false);
+    }
+  } catch (error) {}
 }
-
-
-
-
-
-// CURRENT GOOGLE MEET TRANSCRIPT DOM
-
-{/* <div class="a4cQT" jsaction="bz0DVc:HWTqGc;TpIHXe:c0270d;v2nhid:YHhXNc;kDAVge:lUFH9b;QBUr8:lUFH9b;stc2ve:oh3Xke"
-  jscontroller="D1tHje" style="right: 16px; left: 16px; bottom: 80px;">
-  <div>
-    <div class="iOzk7" jsname="dsyhDe" style="">
-      //PERSON 1
-      <div class="TBMuR bj4p3b" style="">
-        <div><img alt="" class="KpxDtd r6DyN"
-            src="https://lh3.googleusercontent.com/a/some-url"
-            data-iml="453">
-          <div class="zs7s8d jxFHg">Person 1</div>
-        </div>
-        <div jsname="YSxPC" class="Mz6pEf wY1pdd" style="height: 28.4444px;">
-          <div jsname="tgaKEf" class="iTTPOb VbkSUe">
-          <span>Some transcript text.</span>
-          <span>Some more text.</span></div>
-        </div>
-      </div>
-      
-      // PERSON 2
-      <div class="TBMuR bj4p3b" style="">
-        <div><img alt="" class="KpxDtd r6DyN"
-            src="https://lh3.googleusercontent.com/a/some-url"
-            data-iml="453">
-          <div class="zs7s8d jxFHg">Person 2</div>
-        </div>
-        <div jsname="YSxPC" class="Mz6pEf wY1pdd" style="height: 28.4444px;">
-          <div jsname="tgaKEf" class="iTTPOb VbkSUe">
-          <span>Some transcript text.</span>
-          <span>Some more text.</span></div>
-        </div>
-      </div>
-    </div>
-    <div class="iOzk7" jsname="APQunf" style="display: none;"></div>
-  </div>
-  <More divs />
-</div> */}
-
-// CURRENT GOOGLE MEET CHAT MESSAGES DOM
-{/* <div jsname="xySENc" aria-live="polite" jscontroller="Mzzivb" jsaction="nulN2d:XL2g4b;vrPT5c:XL2g4b;k9UrDc:ClCcUe"
-  class="Ge9Kpc z38b6">
-  <div class="Ss4fHf" jsname="Ypafjf" tabindex="-1" jscontroller="LQRnv"
-    jsaction="JIbuQc:sCzVOd(aUCive),T4Iwcd(g21v4c),yyLnsd(iJEnyb),yFT8A(RNMM1e),Cg1Rgf(EZbOH)" style="order: 0;">
-    <div class="QTyiie">
-      <div class="poVWob">You</div>
-      <div jsname="biJjHb" class="MuzmKe">17:00</div>
-    </div>
-    <div class="beTDc">
-      <div class="er6Kjc chmVPb">
-        <div class="ptNLrf">
-          <div jsname="dTKtvb">
-            <div jscontroller="RrV5Ic" jsaction="rcuQ6b:XZyPzc" data-is-tv="false">Hello</div>
-          </div>
-          <div class="pZBsfc">Hover over a message to pin it<i class="google-material-icons VfPpkd-kBDsod WRc1Nb"
-              aria-hidden="true">keep</i></div>
-          <div class="MMfG3b"><span tooltip-id="ucc-17"></span><span data-is-tooltip-wrapper="true"><button
-                class="VfPpkd-Bz112c-LgbsSe yHy1rc eT1oJ tWDL4c Brnbv pFZkBd" jscontroller="soHxf"
-                jsaction="click:cOuCgd; mousedown:UX7yZ; mouseup:lbsD7e; mouseenter:tfO1Yc; mouseleave:JywGue; touchstart:p6p2H; touchmove:FwuNnf; touchend:yfqBxc; touchcancel:JMtRjd; focus:AHmuwe; blur:O22p3e; contextmenu:mg9Pef;mlnRJb:fLiPzd"
-                jsname="iJEnyb" data-disable-idom="true" aria-label="Pin message" data-tooltip-enabled="true"
-                data-tooltip-id="ucc-17" data-tooltip-x-position="3" data-tooltip-y-position="2" role="button"
-                data-message-id="1714476309237">
-                <div jsname="s3Eaab" class="VfPpkd-Bz112c-Jh9lGc"></div>
-                <div class="VfPpkd-Bz112c-J1Ukfc-LhBDec"></div><i class="google-material-icons VfPpkd-kBDsod VjEpdd"
-                  aria-hidden="true">keep</i>
-              </button>
-              <div class="EY8ABd-OWXEXe-TAWMXe" role="tooltip" aria-hidden="true" id="ucc-17">Pin message</div>
-            </span></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div> */}

@@ -1,31 +1,16 @@
 chrome.runtime.onInstalled.addListener(() => {
-    chrome.tabs.create({
-        url: 'http://localhost:5173/welcome' // Replace with your desired URL
-    });
+    chrome.tabs.create({ url: 'http://localhost:5173/welcome' });
 });
-
 
 function downloadScreenshot(dataUrl) {
     chrome.downloads.download({
       url: dataUrl,
       filename: 'screenshot.png',
-      saveAs: false  // Automatically save to the Downloads folder without user prompt
-    }, (downloadId) => {
-      if (chrome.runtime.lastError) {
-        alert('Error downloading screenshot: ' + chrome.runtime.lastError.message);
-      } else {
-        chrome.downloads.search({ id: downloadId }, (results) => {
-        //   if (results && results.length > 0) {
-        //     alert('Screenshot captured and saved to: ' + results[0].filename);
-        //   } else {
-        //     alert('Screenshot captured, but could not retrieve the download path.');
-        //   }
-        });
-      }
+      saveAs: false  
+    }, () => {
+      if (chrome.runtime.lastError) console.error('Error downloading screenshot:', chrome.runtime.lastError.message);
     });
-  }
-
-
+}
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === "authenticate") {
@@ -36,27 +21,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 return;
             }
 
-            // Fetch user info using the token
             fetch('https://www.googleapis.com/oauth2/v1/userinfo?alt=json', {
                 headers: { Authorization: 'Bearer ' + token }
             })
             .then(response => response.json())
             .then(data => {
-                chrome.storage.local.set({
-                    oauthEmail: data.email,
-                    oauthName: data.name
-                }, function () {
-                    console.log('User information stored in Chrome storage.');
-
+                chrome.storage.local.set({ oauthEmail: data.email, oauthName: data.name }, function () {
                     fetch('http://localhost:3000/api/register-from-extension', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ email: data.email, name: data.name })
                     })
-                    .then(result => {
-                        console.log('User registered:', result);
-                        sendResponse({ success: true, email: data.email });
-                    })
+                    .then(() => sendResponse({ success: true, email: data.email }))
                     .catch(error => {
                         console.error('Error registering user:', error);
                         sendResponse({ success: true, email: data.email });
@@ -68,173 +44,128 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 sendResponse({ success: false, error: error.message });
             });
         });
-        return true; // Keep the messaging channel open for asynchronous response
+        return true; 
     }
 
     if (message.action === "capture_screenshot") {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-          const currentTab = tabs[0];
-      
-          // Regular expression to match Google Meet URLs with a meet ID
+          if (!tabs || tabs.length === 0 || !tabs[0]) {
+              sendResponse({ success: false });
+              return;
+          }
           const meetUrlRegex = /^https:\/\/meet\.google\.com\/([a-z]{3}-[a-z]{4}-[a-z]{3})$/;
-      
-          // Check if the current tab's URL matches Google Meet and contains a valid meet ID
-          if (meetUrlRegex.test(currentTab.url)) {
+          if (meetUrlRegex.test(tabs[0].url)) {
             chrome.tabs.captureVisibleTab(null, { format: 'png' }, (dataUrl) => {
               if (chrome.runtime.lastError || !dataUrl) {
-                alert('Failed to capture screenshot: ' + (chrome.runtime.lastError?.message || 'Unknown error.'));
-                sendResponse({ success: false }); // Indicate failure
+                sendResponse({ success: false }); 
               } else {
                 downloadScreenshot(dataUrl);
-                storeScreenshotUrl(dataUrl); // Store the screenshot URL
-                sendResponse({ success: true }); // Indicate success
+                storeScreenshotUrl(dataUrl); 
+                sendResponse({ success: true }); 
               }
             });
-            return true; // Keep the messaging channel open for asynchronous response
-          } else {
-            sendResponse({ success: false }); // Not a valid Google Meet page
-          }
+          } else { sendResponse({ success: false }); }
         });
-      }      
+        return true; 
+    }      
 
-    if (message.type == "new_meeting_started") {
-        chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-            const tabId = tabs[0].id
-            chrome.storage.local.set({ meetingTabId: tabId }, function () {
-                console.log("Meeting tab id saved")
-            })
-        })
+    if (message.type === "new_meeting_started") {
+        const tabId = (sender && sender.tab) ? sender.tab.id : null;
+        if (tabId) {
+            chrome.storage.local.set({ meetingTabId: tabId }, () => sendResponse({ success: true }));
+        } else {
+            chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+                if (tabs && tabs.length > 0 && tabs[0].id) {
+                    chrome.storage.local.set({ meetingTabId: tabs[0].id }, () => sendResponse({ success: true }));
+                } else { sendResponse({ success: false }); }
+            });
+        }
+        return true;
     }
-    if (message.type == "end_meeting") {
-        chrome.storage.local.set({ meetingTabId: null }, function () {
-            console.log("Meeting tab id cleared")
-        })
-        sendToBackend()
-        clearScreenshots()
-    }
-    return true
-  });
 
-//   function storeScreenshotUrl(dataUrl) {
-//     chrome.storage.local.get({ screenshots: [] }, (result) => {
-//       const screenshots = result.screenshots;
-//       screenshots.push(dataUrl); // Add the new screenshot URL to the array
-  
-//     //   // Optionally limit the number of stored screenshots
-//     //   if (screenshots.length > 10) {
-//     //     screenshots.shift(); // Remove the oldest screenshot if exceeding limit
-//     //   }
-  
-//       // Save the updated array back to storage
-//       chrome.storage.local.set({ screenshots: screenshots }, () => {
-//         console.log('Screenshots updated in storage:', screenshots);
-//       });
-//     });
-//   }
+    if (message.type === "end_meeting") {
+        // Atomic processing to prevent duplicate backend sends
+        chrome.storage.local.get(["meetingTabId"], function (data) {
+            if (data.meetingTabId) {
+                chrome.storage.local.set({ meetingTabId: null }, function() {
+                    sendToBackend();
+                    clearScreenshots();
+                    sendResponse({ success: true });
+                });
+            } else {
+                sendResponse({ success: true, ignored: true });
+            }
+        });
+        return true;
+    }
+});
   
 function storeScreenshotUrl(dataUrl) {
-    // Generate a unique filename using the current timestamp
     const uniqueFilename = `screenshot_${Date.now()}.png`;
 
-    // Fetch the ezymeetEmail from Chrome storage
     chrome.storage.local.get('oauthEmail', (result) => {
-        const ezymeetEmail = result.oauthEmail;
-
-        if (ezymeetEmail) {
-            // Prepare the data to send to your backend
+        if (result.oauthEmail) {
             const payload = {
                 filename: uniqueFilename,
                 imageData: dataUrl,
-                email: ezymeetEmail // Include the email in the payload
+                email: result.oauthEmail 
             };
 
-            // Make a network request to your backend to send the image
-            fetch('http://localhost:3000/api/upload-screenshot', { // Replace with your actual backend URL
+            fetch('http://localhost:3000/api/upload-screenshot', { 
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             })
             .then(response => response.json())
-            .then(data => {
-                console.log('Screenshot sent to backend successfully:', data);
-                // Update the screenshots array in Chrome storage
-                updateScreenshotsInStorage(uniqueFilename, ezymeetEmail);
-            })
-            .catch((error) => {
-                console.error('Error sending screenshot to backend:', error);
-            });
-        } else {
-            console.error('ezymeetEmail not found in storage.');
+            .then(() => updateScreenshotsInStorage(uniqueFilename, result.oauthEmail))
+            .catch((error) => console.error('Error sending screenshot to backend:', error));
         }
     });
 }
 
-// Function to update the screenshots array in Chrome storage
 function updateScreenshotsInStorage(uniqueFilename, ezymeetEmail) {
     const timestamp = new Date().toISOString();
-    console.log(uniqueFilename)
-    const screenshotEntry = {
-        filename: `${uniqueFilename}`,
-        timestamp: timestamp,
-        takenBy: ezymeetEmail
-    };
-
     chrome.storage.local.get({ screenshots: [] }, (result) => {
-        const screenshots = result.screenshots;
-        screenshots.push(screenshotEntry); // Add new screenshot entry
-
-        // Save the updated array back to storage
-        chrome.storage.local.set({ screenshots: screenshots }, () => {
-            console.log('Screenshots updated in storage:', screenshots);
-        });
+        const screenshots = result.screenshots || [];
+        screenshots.push({ filename: uniqueFilename, timestamp: timestamp, takenBy: ezymeetEmail }); 
+        chrome.storage.local.set({ screenshots: screenshots });
     });
 }
   
-
-  chrome.tabs.onRemoved.addListener(function (tabid) {
+// Failsafe: if they close the tab instead of clicking the end call button
+chrome.tabs.onRemoved.addListener(function (tabid) {
     chrome.storage.local.get(["meetingTabId"], function (data) {
-        if (tabid == data.meetingTabId) {
-            console.log("Successfully intercepted tab close")
-            sendToBackend()
-            chrome.storage.local.set({ meetingTabId: null }, function () {
-                console.log("Meeting tab id cleared for next meeting")
-            })
+        if (tabid === data.meetingTabId) {
+            chrome.storage.local.set({ meetingTabId: null }, function() {
+                console.info("[EzyMeet Log] User closed meeting tab directly. Triggering backend dispatch...");
+                sendToBackend();
+                clearScreenshots();
+            });
         }
-    })
-})
-function parseCustomTimestamp(timestamp,isFringe) {
-    const [datePart, timePart] = timestamp.split(', ');
-
-    const [day, month, year] = (isFringe ? datePart.split('-').map(Number) :  datePart.split('/').map(Number)) 
-    const [time, period] = timePart.split(' ');
-    let [hours, minutes, seconds] = (isFringe ? time.split('-').map(Number) : time.split(':').map(Number));
-
-    if (seconds === undefined) {
-        seconds = 0;
-    }
-
-    const dateObject = new Date(year, month - 1, day, hours, minutes, seconds);
-
-    return dateObject
-}
+    });
+});
 
 function sendToBackend() {
+    console.info("[EzyMeet Log] Processing Meeting Data Generation...");
+
     chrome.storage.local.get(["userName", "transcript", "chatMessages", "meetingTitle", "meetingStartTimeStamp", "meetingEndTimeStamp", "attendees", "speakers","oauthEmail", "oauthName", "screenshots"], function (result) {
-        console.log(result);
-        const speakerDuration={};
+        const speakerDuration = {};
         
-        if (result.userName && result.transcript && result.chatMessages) {
+        // Removed `&& result.transcript` check, allows saving empty meetings if they just used chat/attendance.
+        if (result.userName) {
             const lines = [];
             const averageWPM = 170;
+            const fallbackIsoDate = new Date().toISOString();
+            const transcriptArray = result.transcript || [];
+            const chatArray = result.chatMessages || [];
             
-            result.transcript.forEach(entry => {
+            transcriptArray.forEach(entry => {
+                if (!entry.personTranscript) return;
                 const wordCount = entry.personTranscript.split(' ').length;
                 const durationInSeconds = Math.round((wordCount / averageWPM) * 60); 
                 const transcriptEntry = {
-                    name: (entry.personName == "You" ? result.userName : entry.personName),
-                    timeStamp: parseCustomTimestamp(entry.timeStamp, false),
+                    name: (entry.personName === "You" ? result.userName : entry.personName),
+                    timeStamp: entry.timeStamp || fallbackIsoDate, // Direct ISO
                     type: "transcript",
                     duration: durationInSeconds,
                     content: entry.personTranscript
@@ -242,61 +173,68 @@ function sendToBackend() {
                 
                 lines.push(transcriptEntry);
                 const speakerName = transcriptEntry.name;
-                if (speakerDuration[speakerName])    speakerDuration[speakerName] += transcriptEntry.duration;
+                if (speakerDuration[speakerName]) speakerDuration[speakerName] += transcriptEntry.duration;
                 else speakerDuration[speakerName] = transcriptEntry.duration;
-                
             });
 
-            if (result.chatMessages.length > 0) {
-                result.chatMessages.forEach(entry => {
+            if (chatArray.length > 0) {
+                chatArray.forEach(entry => {
                     lines.push({
-                        name: (entry.personName=="You" ?  result.userName :  entry.personName),
-                        timeStamp: parseCustomTimestamp(entry.timeStamp, false),
+                        name: (entry.personName === "You" ? result.userName : entry.personName),
+                        timeStamp: entry.timeStamp || fallbackIsoDate, // Direct ISO
                         type: "chat",
-                        duration: 0, // chat msgs don't count as spoken time
+                        duration: 0,
                         content: entry.chatMessageText
                     });
                 });
             }
 
-            console.log(result.speakers, result.attendees)
             const speakersArray = Array.from(result.speakers || []).map(speaker => speaker.trim()).filter(speaker => speaker !== "");
+            const attendeesList = result.attendees || [];
+            
+            // Build the payload
+            const payload = {
+                blabberEmail: result.oauthEmail,
+                blabberName: result.oauthName,
+                screenshots: result.screenshots || [],
+                convenor: result.userName || "You",
+                meetingTitle: result.meetingTitle || "Untitled Meeting",
+                meetingStartTimeStamp: result.meetingStartTimeStamp || fallbackIsoDate,
+                meetingEndTimeStamp: result.meetingEndTimeStamp || fallbackIsoDate,
+                speakers: speakersArray,
+                attendees: attendeesList.filter(attendee => attendee && !attendee.includes("(Presentation)")),
+                transcriptData: lines,
+                speakerDuration
+            };
 
+            // Requested Logs 
+            console.group("[EzyMeet Log] Final Payload Created");
+            console.info(`-> Started At: ${payload.meetingStartTimeStamp}`);
+            console.info(`-> Ended At: ${payload.meetingEndTimeStamp}`);
+            console.info(`-> Total Screenshots Generated: ${payload.screenshots.length}`);
+            console.info(`-> Total Timeline Entries Generated (Chat + Transcripts): ${payload.transcriptData.length}`);
+            console.info(`-> Total Attendees Detected: ${payload.attendees.length}`);
+            console.log("-> Full Payload JSON:", JSON.stringify(payload, null, 2));
+            console.groupEnd();
+
+            // Send to DB
             fetch('http://localhost:3000/api/meet', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    blabberEmail: result.oauthEmail,
-                    blabberName: result.oauthName,
-                    screenshots: result.screenshots,
-                    convenor: result.userName,
-                    meetingTitle: result.meetingTitle || "Untitled Meeting",
-                    meetingStartTimeStamp: parseCustomTimestamp(result.meetingStartTimeStamp, true) || new Date().toISOString(),
-                    meetingEndTimeStamp: parseCustomTimestamp(result.meetingEndTimeStamp,true) || undefined,
-                    speakers: speakersArray,
-                    attendees: result.attendees.filter(attendee => !(attendee.includes("(Presentation)"))),
-                    transcriptData: lines,
-                    speakerDuration
-                }),
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
             })
-            .then(response => response.json())
-            .then(data => {
-                console.log('Success:', data);
+            .then(response => {
+                if (!response.ok) throw new Error(`HTTP Error! Status: ${response.status}`);
+                return response.json();
             })
-            .catch((error) => {
-                console.error('Error:', error);
-            });
+            .then(data => console.info('[EzyMeet Log] Successfully created meeting in database:', data))
+            .catch(error => console.error('[EzyMeet Error] Failed to send payload to backend:', error));
         } else {
-            console.log("No transcript found");
+            console.warn("[EzyMeet Warning] Missing User Name context. Payload aborted.");
         }
     });
 }
   
-
 function clearScreenshots() {
-    chrome.storage.local.remove('screenshots', () => {
-      console.log('Screenshots cleared from storage.');
-    });
-  }
+    chrome.storage.local.remove('screenshots');
+}
